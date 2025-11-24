@@ -1,10 +1,16 @@
-from fastapi import APIRouter, HTTPException, status, Request, Depends
+from fastapi import APIRouter, HTTPException, status, Request, Depends, UploadFile, File
 from typing import List, Optional
 from bson import ObjectId
 from models import JajananCreate, JajananUpdate, JajananResponse
 from auth import get_current_user, TokenData
+import shutil
+from pathlib import Path
 
 router = APIRouter()
+
+# Path untuk upload files
+UPLOAD_DIR = Path("../Frontend/public/uploads/jajanan")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @router.get("/", response_model=List[JajananResponse])
 async def get_all_jajanan(
@@ -127,3 +133,53 @@ async def delete_jajanan(
         )
     
     return None
+
+@router.post("/{jajanan_id}/upload-foto", response_model=JajananResponse)
+async def upload_foto_jajanan(
+    jajanan_id: str,
+    file: UploadFile = File(...),
+    request: Request = None,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """Upload product photo (admin only)"""
+    db = request.app.mongodb
+    
+    if not ObjectId.is_valid(jajanan_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid jajanan ID format"
+        )
+    
+    jajanan = db.jajanan.find_one({"_id": ObjectId(jajanan_id)})
+    if not jajanan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Jajanan not found"
+        )
+    
+    # Validate file type
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+    
+    # Save file
+    file_extension = file.filename.split('.')[-1]
+    filename = f"jajanan_{jajanan_id}.{file_extension}"
+    file_path = UPLOAD_DIR / filename
+    
+    with file_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update database
+    foto_url = f"/uploads/jajanan/{filename}"
+    db.jajanan.update_one(
+        {"_id": ObjectId(jajanan_id)},
+        {"$set": {"foto_url": foto_url}}
+    )
+    
+    updated_jajanan = db.jajanan.find_one({"_id": ObjectId(jajanan_id)})
+    updated_jajanan["_id"] = str(updated_jajanan["_id"])
+    
+    return updated_jajanan

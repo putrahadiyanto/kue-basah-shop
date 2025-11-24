@@ -3,20 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { jajananAPI, pesananAPI } from '@/lib/api'
 import toast from 'react-hot-toast'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 
 interface Jajanan {
   _id: string
@@ -33,7 +22,6 @@ interface Pesanan {
   _id: string
   pelanggan_id: string
   tanggal_pesan: string
-  tanggal_pengiriman_diminta: string
   status_pesanan: string
   item_pesanan: Array<{
     jajanan_id: string
@@ -41,9 +29,6 @@ interface Pesanan {
     harga_satuan: number
   }>
   pembayaran: {
-    metode: string
-    status_pembayaran: string
-    ongkos_kirim: number
     total_pembayaran: number
   }
 }
@@ -54,8 +39,11 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<Jajanan[]>([])
   const [orders, setOrders] = useState<Pesanan[]>([])
   const [loadingData, setLoadingData] = useState(true)
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [newProduct, setNewProduct] = useState({
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Jajanan | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [formData, setFormData] = useState({
     nama: '',
     deskripsi: '',
     harga: 0,
@@ -74,8 +62,10 @@ export default function AdminDashboard() {
   }, [loading, isAuthenticated, isAdmin, router])
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (isAdmin()) {
+      fetchData()
+    }
+  }, [isAdmin])
 
   const fetchData = async () => {
     try {
@@ -93,50 +83,66 @@ export default function AdminDashboard() {
     }
   }
 
+  const resetForm = () => {
+    setFormData({
+      nama: '',
+      deskripsi: '',
+      harga: 0,
+      satuan: 'per buah',
+      status_ketersediaan: 'ready_stok',
+      waktu_preorder_hari: 0,
+      foto_url: '',
+    })
+  }
+
   const handleAddProduct = async () => {
-    // Validation
-    if (!newProduct.nama.trim()) {
+    if (!formData.nama.trim()) {
       toast.error('Nama produk harus diisi')
       return
     }
-    if (!newProduct.deskripsi.trim()) {
-      toast.error('Deskripsi produk harus diisi')
+    if (!formData.deskripsi.trim()) {
+      toast.error('Deskripsi harus diisi')
       return
     }
-    if (newProduct.harga <= 0) {
+    if (formData.harga <= 0) {
       toast.error('Harga harus lebih dari 0')
-      return
-    }
-    if (newProduct.status_ketersediaan === 'pre_order' && newProduct.waktu_preorder_hari <= 0) {
-      toast.error('Waktu pre-order harus lebih dari 0 hari')
       return
     }
 
     const loadingToast = toast.loading('Menambahkan produk...')
     
     try {
-      await jajananAPI.create(newProduct)
-      setIsAddDialogOpen(false)
-      setNewProduct({
-        nama: '',
-        deskripsi: '',
-        harga: 0,
-        satuan: 'per buah',
-        status_ketersediaan: 'ready_stok',
-        waktu_preorder_hari: 0,
-        foto_url: '',
-      })
+      await jajananAPI.create(formData)
+      setShowAddModal(false)
+      resetForm()
       fetchData()
-      toast.success(' Produk berhasil ditambahkan!', { id: loadingToast })
+      toast.success('✅ Produk berhasil ditambahkan!', { id: loadingToast })
     } catch (error) {
       console.error('Failed to add product:', error)
       toast.error('Gagal menambahkan produk', { id: loadingToast })
     }
   }
 
+  const handleEditProduct = async () => {
+    if (!selectedProduct) return
+
+    const loadingToast = toast.loading('Mengupdate produk...')
+    
+    try {
+      await jajananAPI.update(selectedProduct._id, formData)
+      setShowEditModal(false)
+      setSelectedProduct(null)
+      resetForm()
+      fetchData()
+      toast.success('✅ Produk berhasil diupdate!', { id: loadingToast })
+    } catch (error) {
+      console.error('Failed to update product:', error)
+      toast.error('Gagal mengupdate produk', { id: loadingToast })
+    }
+  }
+
   const handleDeleteProduct = async (id: string, nama: string) => {
-    const confirmDelete = confirm(`Hapus produk "${nama}"?`)
-    if (!confirmDelete) return
+    if (!confirm(`Hapus produk "${nama}"?`)) return
     
     const loadingToast = toast.loading('Menghapus produk...')
     
@@ -148,6 +154,51 @@ export default function AdminDashboard() {
       console.error('Failed to delete product:', error)
       toast.error('Gagal menghapus produk', { id: loadingToast })
     }
+  }
+
+  const handleUploadPhoto = async (productId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return
+    
+    const file = e.target.files[0]
+    
+    if (!file.type.startsWith('image/')) {
+      toast.error('File harus berupa gambar')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB')
+      return
+    }
+
+    setUploadingPhoto(true)
+    const loadingToast = toast.loading('Mengupload foto...')
+    
+    try {
+      await jajananAPI.uploadFoto(productId, file)
+      toast.success('✅ Foto berhasil diupload!', { id: loadingToast })
+      fetchData()
+    } catch (error) {
+      console.error('Failed to upload photo:', error)
+      toast.error('Gagal mengupload foto', { id: loadingToast })
+    } finally {
+      setUploadingPhoto(false)
+      e.target.value = ''
+    }
+  }
+
+  const openEditModal = (product: Jajanan) => {
+    setSelectedProduct(product)
+    setFormData({
+      nama: product.nama,
+      deskripsi: product.deskripsi,
+      harga: product.harga,
+      satuan: product.satuan,
+      status_ketersediaan: product.status_ketersediaan,
+      waktu_preorder_hari: product.waktu_preorder_hari,
+      foto_url: product.foto_url || '',
+    })
+    setShowEditModal(true)
   }
 
   if (loading || loadingData) {
@@ -165,14 +216,8 @@ export default function AdminDashboard() {
     totalRevenue: orders.reduce((sum, order) => sum + order.pembayaran.total_pembayaran, 0),
     totalProducts: products.length,
     pendingOrders: orders.filter(o => o.status_pesanan === 'Menunggu Pembayaran').length,
-    completedOrders: orders.filter(o => o.status_pesanan === 'Selesai').length,
-    processingOrders: orders.filter(o => o.status_pesanan === 'Diproses').length,
-    totalCustomers: new Set(orders.map(o => o.pelanggan_id)).size,
-    readyStock: products.filter(p => p.status_ketersediaan === 'ready_stok').length,
-    preOrder: products.filter(p => p.status_ketersediaan === 'pre_order').length,
   }
 
-  // Top selling products (based on orders)
   const productSales = orders.flatMap(o => o.item_pesanan).reduce((acc, item) => {
     acc[item.jajanan_id] = (acc[item.jajanan_id] || 0) + item.qty
     return acc
@@ -185,287 +230,160 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
+      {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <h1 className="text-3xl font-bold text-primary">Admin Dashboard</h1>
           <p className="text-neutral-600 mt-1">Kelola produk dan monitor penjualan</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-neutral-50 shadow-md">+ Tambah Produk</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-neutral-50 border-2 border-primary/20">
-            <DialogHeader>
-              <DialogTitle className="text-2xl text-primary">Tambah Produk Jajanan Baru</DialogTitle>
-              <DialogDescription className="text-neutral-600">
-                Lengkapi semua informasi produk dengan detail. Semua field wajib diisi.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-5 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label htmlFor="nama" className="text-base font-semibold text-primary">Nama Produk *</Label>
-                  <Input
-                    id="nama"
-                    placeholder="Contoh: Kue Lapis Legit"
-                    value={newProduct.nama}
-                    onChange={(e) => setNewProduct({ ...newProduct, nama: e.target.value })}
-                    className="mt-1 border-neutral-300 focus:border-primary text-neutral-900"
-                  />
-                </div>
-                
-                <div className="col-span-2">
-                  <Label htmlFor="deskripsi" className="text-base font-semibold text-primary">Deskripsi Lengkap *</Label>
-                  <Textarea
-                    id="deskripsi"
-                    placeholder="Jelaskan detail produk, bahan, rasa, dan keunikan produk ini..."
-                    value={newProduct.deskripsi}
-                    onChange={(e) => setNewProduct({ ...newProduct, deskripsi: e.target.value })}
-                    className="mt-1 min-h-[100px] border-neutral-300 focus:border-primary text-neutral-900"
-                  />
-                  <p className="text-xs text-neutral-600 mt-1">{newProduct.deskripsi.length} karakter</p>
-                </div>
+        <div className="flex gap-3">
+          <Link href="/admin/pesanan" className="px-4 py-2 bg-neutral-700 text-white rounded hover:bg-neutral-800 transition font-medium">
+            📦 Kelola Pesanan
+          </Link>
+          <button 
+            onClick={() => {
+              resetForm()
+              setShowAddModal(true)
+            }}
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition font-medium"
+          >
+            + Tambah Produk
+          </button>
+        </div>
+      </div>
 
-                <div>
-                  <Label htmlFor="harga" className="text-base font-semibold text-primary">Harga (Rp) *</Label>
-                  <Input
-                    id="harga"
-                    type="number"
-                    placeholder="25000"
-                    value={newProduct.harga || ''}
-                    onChange={(e) => setNewProduct({ ...newProduct, harga: parseInt(e.target.value) || 0 })}
-                    className="mt-1 border-neutral-300 focus:border-primary text-neutral-900"
-                  />
-                </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white border-2 border-neutral-300 rounded-lg p-6">
+          <p className="text-neutral-600 text-sm font-medium mb-1">Total Pesanan</p>
+          <p className="text-3xl font-bold text-primary">{stats.totalOrders}</p>
+          <p className="text-xs text-neutral-500 mt-2">{stats.pendingOrders} pending</p>
+        </div>
+        
+        <div className="bg-white border-2 border-neutral-300 rounded-lg p-6">
+          <p className="text-neutral-600 text-sm font-medium mb-1">Total Pendapatan</p>
+          <p className="text-3xl font-bold text-secondary">Rp {(stats.totalRevenue / 1000).toFixed(0)}k</p>
+          <p className="text-xs text-neutral-500 mt-2">Dari {stats.totalOrders} transaksi</p>
+        </div>
+        
+        <div className="bg-white border-2 border-neutral-300 rounded-lg p-6">
+          <p className="text-neutral-600 text-sm font-medium mb-1">Total Produk</p>
+          <p className="text-3xl font-bold text-primary">{stats.totalProducts}</p>
+          <p className="text-xs text-neutral-500 mt-2">{products.filter(p => p.status_ketersediaan === 'ready_stok').length} ready stock</p>
+        </div>
+        
+        <div className="bg-white border-2 border-neutral-300 rounded-lg p-6">
+          <p className="text-neutral-600 text-sm font-medium mb-1">Pelanggan Aktif</p>
+          <p className="text-3xl font-bold text-primary">{new Set(orders.map(o => o.pelanggan_id)).size}</p>
+          <p className="text-xs text-neutral-500 mt-2">Total pelanggan</p>
+        </div>
+      </div>
 
-                <div>
-                  <Label htmlFor="satuan" className="text-base font-semibold text-primary">Satuan *</Label>
-                  <select
-                    id="satuan"
-                    className="w-full border border-neutral-300 rounded-md px-3 py-2 mt-1 text-neutral-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={newProduct.satuan}
-                    onChange={(e) => setNewProduct({ ...newProduct, satuan: e.target.value })}
-                  >
-                    <option value="per buah">Per Buah</option>
-                    <option value="per loyang">Per Loyang</option>
-                    <option value="per porsi">Per Porsi</option>
-                    <option value="per box">Per Box</option>
-                    <option value="per pack">Per Pack</option>
-                  </select>
-                </div>
-
-                <div>
-                  <Label htmlFor="status" className="text-base font-semibold text-primary">Status Ketersediaan *</Label>
-                  <select
-                    id="status"
-                    className="w-full border border-neutral-300 rounded-md px-3 py-2 mt-1 text-neutral-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={newProduct.status_ketersediaan}
-                    onChange={(e) => setNewProduct({ ...newProduct, status_ketersediaan: e.target.value })}
-                  >
-                    <option value="ready_stok">Ready Stok</option>
-                    <option value="pre_order">Pre Order</option>
-                  </select>
-                </div>
-
-                <div>
-                  <Label htmlFor="waktu" className="text-base font-semibold text-primary">
-                    Waktu Pre-order (hari) {newProduct.status_ketersediaan === 'pre_order' && '*'}
-                  </Label>
-                  <Input
-                    id="waktu"
-                    type="number"
-                    placeholder="3"
-                    value={newProduct.waktu_preorder_hari || ''}
-                    onChange={(e) => setNewProduct({ ...newProduct, waktu_preorder_hari: parseInt(e.target.value) || 0 })}
-                    disabled={newProduct.status_ketersediaan === 'ready_stok'}
-                    className="mt-1 border-neutral-300 focus:border-primary text-neutral-900"
-                  />
-                  {newProduct.status_ketersediaan === 'ready_stok' && (
-                    <p className="text-xs text-neutral-600 mt-1">Tidak perlu untuk ready stok</p>
-                  )}
-                </div>
-
-                <div className="col-span-2">
-                  <Label htmlFor="foto" className="text-base font-semibold text-primary">URL Foto (opsional)</Label>
-                  <Input
-                    id="foto"
-                    placeholder="https://example.com/image.jpg"
-                    value={newProduct.foto_url}
-                    onChange={(e) => setNewProduct({ ...newProduct, foto_url: e.target.value })}
-                    className="mt-1 border-neutral-300 focus:border-primary text-neutral-900"
-                  />
-                </div>
+      {/* Top Products */}
+      <div className="bg-white border-2 border-neutral-300 rounded-lg p-6 mb-8">
+        <h2 className="text-xl font-bold text-primary mb-4">🏆 Produk Terlaris</h2>
+        <div className="space-y-3">
+          {topProducts.map((product, index) => (
+            <div key={product._id} className="flex items-center gap-4 p-3 border border-neutral-200 rounded hover:bg-neutral-50 transition">
+              <span className="text-2xl font-bold text-neutral-400">#{index + 1}</span>
+              <div className="w-12 h-12 bg-neutral-200 rounded flex-shrink-0 overflow-hidden">
+                {product.foto_url ? (
+                  <img src={product.foto_url} alt={product.nama} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-neutral-400">📦</div>
+                )}
               </div>
-
-              {/* Preview */}
-              {newProduct.nama && (
-                <div className="border-t border-neutral-300 pt-4">
-                  <p className="font-semibold mb-2 text-primary">Preview:</p>
-                  <div className="bg-white rounded-lg p-4 border-2 border-neutral-200">
-                    <h3 className="font-bold text-lg text-primary">{newProduct.nama}</h3>
-                    {newProduct.deskripsi && <p className="text-sm text-neutral-600 mt-1">{newProduct.deskripsi}</p>}
-                    <p className="text-primary font-bold text-xl mt-2">Rp {newProduct.harga.toLocaleString('id-ID')}</p>
-                    <p className="text-sm text-neutral-600">{newProduct.satuan}</p>
-                    <span className={`inline-block mt-2 px-3 py-1 rounded text-xs ${
-                      newProduct.status_ketersediaan === 'ready_stok' 
-                        ? 'badge-ready' 
-                        : 'badge-preorder'
-                    }`}>
-                      {newProduct.status_ketersediaan === 'ready_stok' ? 'Ready Stok' : `Pre-order ${newProduct.waktu_preorder_hari} hari`}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-4">
-                <Button onClick={handleAddProduct} className="flex-1 bg-primary hover:bg-primary/90 text-neutral-50">
-                   Tambahkan Produk
-                </Button>
-                <Button 
-                  onClick={() => setIsAddDialogOpen(false)} 
-                  variant="outline"
-                  className="flex-1 border-primary text-primary hover:bg-primary hover:text-neutral-50"
-                >
-                  Batal
-                </Button>
+              <div className="flex-1">
+                <p className="font-semibold text-neutral-900">{product.nama}</p>
+                <p className="text-sm text-neutral-600">Rp {product.harga.toLocaleString('id-ID')} • {product.satuan}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-primary">Terjual: {product.sold}</p>
+                <p className="text-sm text-neutral-600">Rp {(product.sold * product.harga).toLocaleString('id-ID')}</p>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Enhanced Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-primary to-primary/80 text-neutral-50 rounded-lg p-6 shadow-lg border-2 border-primary/20">
-          <p className="text-neutral-100 text-sm font-medium">Total Pesanan</p>
-          <p className="text-4xl font-bold mt-2">{stats.totalOrders}</p>
-          <p className="text-neutral-200 text-xs mt-2">
-            {stats.pendingOrders} pending • {stats.processingOrders} diproses • {stats.completedOrders} selesai
-          </p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-success to-success/80 text-neutral-50 rounded-lg p-6 shadow-lg border-2 border-success/20">
-          <p className="text-neutral-100 text-sm font-medium">Total Pendapatan</p>
-          <p className="text-3xl font-bold mt-2">Rp {(stats.totalRevenue / 1000).toFixed(0)}K</p>
-          <p className="text-neutral-200 text-xs mt-2">Dari {stats.totalOrders} transaksi</p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-secondary to-secondary/80 text-neutral-900 rounded-lg p-6 shadow-lg border-2 border-secondary/30">
-          <p className="text-neutral-700 text-sm font-medium">Total Produk</p>
-          <p className="text-4xl font-bold mt-2">{stats.totalProducts}</p>
-          <p className="text-neutral-700 text-xs mt-2">
-            {stats.readyStock} ready • {stats.preOrder} pre-order
-          </p>
-        </div>
-        
-        <div className="bg-gradient-to-br from-warning to-warning/80 text-neutral-50 rounded-lg p-6 shadow-lg border-2 border-warning/20">
-          <p className="text-neutral-100 text-sm font-medium">Total Pelanggan</p>
-          <p className="text-4xl font-bold mt-2">{stats.totalCustomers}</p>
-          <p className="text-neutral-200 text-xs mt-2">Pelanggan aktif</p>
-        </div>
-      </div>
-
-      {/* Dashboard Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Top Products */}
-        <div className="border border-neutral-300 rounded-lg p-6 bg-white shadow">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            🏆 Produk Terlaris
-          </h2>
-          <div className="space-y-3">
-            {topProducts.map((p, idx) => (
-              <div key={p._id} className="flex justify-between items-center pb-3 border-b border-neutral-200 last:border-0">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl font-bold text-neutral-300">#{idx + 1}</span>
-                  <div>
-                    <p className="font-semibold">{p.nama}</p>
-                    <p className="text-sm text-neutral-600">Rp {p.harga.toLocaleString('id-ID')}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-primary">{p.sold} terjual</p>
-                  <p className="text-xs text-neutral-600">{p.status_ketersediaan === 'ready_stok' ? 'Ready' : 'Pre-order'}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent Orders */}
-        <div className="border border-neutral-300 rounded-lg p-6 bg-white shadow">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            📦 Pesanan Terbaru
-          </h2>
-          <div className="space-y-3">
-            {orders.slice(0, 5).map((order) => (
-              <div key={order._id} className="flex justify-between items-center pb-3 border-b border-neutral-200 last:border-0">
-                <div>
-                  <p className="font-semibold">#{order._id.substring(0, 8).toUpperCase()}</p>
-                  <p className="text-sm text-neutral-600">
-                    {new Date(order.tanggal_pesan).toLocaleDateString('id-ID', { 
-                      day: 'numeric', 
-                      month: 'short', 
-                      year: 'numeric' 
-                    })}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-primary">Rp {order.pembayaran.total_pembayaran.toLocaleString('id-ID')}</p>
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    order.status_pesanan === 'Selesai' ? 'bg-green-100 text-green-800' :
-                    order.status_pesanan === 'Diproses' ? 'bg-blue-100 text-blue-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {order.status_pesanan}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
 
       {/* Products Table */}
-      <div className="border border-neutral-300 rounded-lg overflow-hidden bg-white shadow">
-        <div className="bg-neutral-100 px-6 py-4 border-b border-neutral-300">
-          <h2 className="text-xl font-semibold">Semua Produk ({products.length})</h2>
+      <div className="bg-white border-2 border-neutral-300 rounded-lg overflow-hidden">
+        <div className="p-6 border-b border-neutral-300">
+          <h2 className="text-xl font-bold text-primary">Semua Produk ({products.length})</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-neutral-50 border-b border-neutral-300">
+            <thead className="bg-neutral-100">
               <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Nama</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Deskripsi</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Harga</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Status</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Terjual</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Aksi</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Nama</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Deskripsi</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Harga</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Foto</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Aksi</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-neutral-200">
               {products.map((product) => (
-                <tr key={product._id} className="border-b border-neutral-200 hover:bg-neutral-50">
-                  <td className="px-6 py-4 font-semibold">{product.nama}</td>
-                  <td className="px-6 py-4 text-sm text-neutral-600 max-w-xs truncate">{product.deskripsi}</td>
-                  <td className="px-6 py-4 text-primary font-bold">Rp {product.harga.toLocaleString('id-ID')}</td>
+                <tr key={product._id} className="hover:bg-neutral-50">
                   <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded text-xs font-medium ${
+                    <p className="font-semibold text-neutral-900">{product.nama}</p>
+                    <p className="text-sm text-neutral-600">{product.satuan}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-sm text-neutral-700 line-clamp-2">{product.deskripsi}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="font-semibold text-primary">Rp {product.harga.toLocaleString('id-ID')}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                       product.status_ketersediaan === 'ready_stok' 
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {product.status_ketersediaan === 'ready_stok' ? 'Ready Stok' : `Pre-order ${product.waktu_preorder_hari}h`}
+                      {product.status_ketersediaan === 'ready_stok' ? 'Ready Stock' : 'Pre-order'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-center font-semibold">{productSales[product._id] || 0}</td>
                   <td className="px-6 py-4">
-                    <button 
-                      onClick={() => handleDeleteProduct(product._id, product.nama)}
-                      className="text-red-600 hover:text-red-700 font-medium text-sm"
-                    >
-                      🗑️ Hapus
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {product.foto_url ? (
+                        <img src={product.foto_url} alt={product.nama} className="w-16 h-16 object-cover rounded" />
+                      ) : (
+                        <div className="w-16 h-16 bg-neutral-200 rounded flex items-center justify-center text-neutral-400">
+                          No Image
+                        </div>
+                      )}
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleUploadPhoto(product._id, e)}
+                          disabled={uploadingPhoto}
+                          className="hidden"
+                        />
+                        <span className="text-xs text-primary hover:underline">
+                          {uploadingPhoto ? 'Uploading...' : 'Upload'}
+                        </span>
+                      </label>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEditModal(product)}
+                        className="text-primary hover:text-primary/80 font-medium text-sm"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(product._id, product.nama)}
+                        className="text-red-600 hover:text-red-700 font-medium text-sm"
+                      >
+                        🗑️ Hapus
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -473,6 +391,219 @@ export default function AdminDashboard() {
           </table>
         </div>
       </div>
+
+      {/* Add Product Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-neutral-200">
+              <h2 className="text-2xl font-bold text-primary">Tambah Produk Baru</h2>
+              <p className="text-neutral-600 text-sm mt-1">Lengkapi semua informasi produk</p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-1">Nama Produk *</label>
+                <input
+                  type="text"
+                  value={formData.nama}
+                  onChange={(e) => setFormData({...formData, nama: e.target.value})}
+                  placeholder="Contoh: Kue Lapis Legit"
+                  className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-1">Deskripsi *</label>
+                <textarea
+                  value={formData.deskripsi}
+                  onChange={(e) => setFormData({...formData, deskripsi: e.target.value})}
+                  placeholder="Jelaskan detail produk..."
+                  rows={4}
+                  className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-700 mb-1">Harga (Rp) *</label>
+                  <input
+                    type="number"
+                    value={formData.harga || ''}
+                    onChange={(e) => setFormData({...formData, harga: parseInt(e.target.value) || 0})}
+                    placeholder="25000"
+                    className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-700 mb-1">Satuan *</label>
+                  <select
+                    value={formData.satuan}
+                    onChange={(e) => setFormData({...formData, satuan: e.target.value})}
+                    className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="per buah">per buah</option>
+                    <option value="per box">per box</option>
+                    <option value="per loyang">per loyang</option>
+                    <option value="per kg">per kg</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-700 mb-1">Status Ketersediaan *</label>
+                  <select
+                    value={formData.status_ketersediaan}
+                    onChange={(e) => setFormData({...formData, status_ketersediaan: e.target.value})}
+                    className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="ready_stok">Ready Stock</option>
+                    <option value="pre_order">Pre-order</option>
+                  </select>
+                </div>
+
+                {formData.status_ketersediaan === 'pre_order' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-1">Waktu Pre-order (hari)</label>
+                    <input
+                      type="number"
+                      value={formData.waktu_preorder_hari}
+                      onChange={(e) => setFormData({...formData, waktu_preorder_hari: parseInt(e.target.value) || 0})}
+                      placeholder="3"
+                      className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-neutral-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowAddModal(false)
+                  resetForm()
+                }}
+                className="px-4 py-2 border border-neutral-300 rounded hover:bg-neutral-50 transition font-medium"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleAddProduct}
+                className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition font-medium"
+              >
+                Tambah Produk
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {showEditModal && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-neutral-200">
+              <h2 className="text-2xl font-bold text-primary">Edit Produk</h2>
+              <p className="text-neutral-600 text-sm mt-1">Update informasi produk</p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-1">Nama Produk *</label>
+                <input
+                  type="text"
+                  value={formData.nama}
+                  onChange={(e) => setFormData({...formData, nama: e.target.value})}
+                  className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-1">Deskripsi *</label>
+                <textarea
+                  value={formData.deskripsi}
+                  onChange={(e) => setFormData({...formData, deskripsi: e.target.value})}
+                  rows={4}
+                  className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-700 mb-1">Harga (Rp) *</label>
+                  <input
+                    type="number"
+                    value={formData.harga || ''}
+                    onChange={(e) => setFormData({...formData, harga: parseInt(e.target.value) || 0})}
+                    className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-700 mb-1">Satuan *</label>
+                  <select
+                    value={formData.satuan}
+                    onChange={(e) => setFormData({...formData, satuan: e.target.value})}
+                    className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="per buah">per buah</option>
+                    <option value="per box">per box</option>
+                    <option value="per loyang">per loyang</option>
+                    <option value="per kg">per kg</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-700 mb-1">Status Ketersediaan *</label>
+                  <select
+                    value={formData.status_ketersediaan}
+                    onChange={(e) => setFormData({...formData, status_ketersediaan: e.target.value})}
+                    className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="ready_stok">Ready Stock</option>
+                    <option value="pre_order">Pre-order</option>
+                  </select>
+                </div>
+
+                {formData.status_ketersediaan === 'pre_order' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-1">Waktu Pre-order (hari)</label>
+                    <input
+                      type="number"
+                      value={formData.waktu_preorder_hari}
+                      onChange={(e) => setFormData({...formData, waktu_preorder_hari: parseInt(e.target.value) || 0})}
+                      className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-neutral-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowEditModal(false)
+                  setSelectedProduct(null)
+                  resetForm()
+                }}
+                className="px-4 py-2 border border-neutral-300 rounded hover:bg-neutral-50 transition font-medium"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleEditProduct}
+                className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition font-medium"
+              >
+                Update Produk
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

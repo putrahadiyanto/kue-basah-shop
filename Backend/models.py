@@ -136,6 +136,8 @@ class Pembayaran(BaseModel):
     status_pembayaran: str  # Pending, Paid, Failed, Expired
     ongkos_kirim: int
     total_pembayaran: int
+    bukti_pembayaran_url: Optional[str] = None
+    qris_url: Optional[str] = None
 
 class ItemPesanan(BaseModel):
     jajanan_id: str

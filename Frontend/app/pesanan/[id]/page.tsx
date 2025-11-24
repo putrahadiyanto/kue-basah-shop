@@ -49,6 +49,7 @@ export default function PesananDetailPage() {
   const [pesanan, setPesanan] = useState<Pesanan | null>(null)
   const [items, setItems] = useState<ItemWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [uploadingBukti, setUploadingBukti] = useState(false)
 
   useEffect(() => {
     if (!authLoading && isAdmin()) {
@@ -95,6 +96,54 @@ export default function PesananDetailPage() {
       router.push('/pesanan')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleConfirmReceived = async () => {
+    if (!pesanan) return
+    
+    const loadingToast = toast.loading('Mengkonfirmasi penerimaan...')
+    try {
+      await pesananAPI.confirmReceived(pesanan._id)
+      toast.success('✅ Pesanan dikonfirmasi diterima!', { id: loadingToast })
+      fetchPesanan() // Reload data
+    } catch (error) {
+      console.error('Failed to confirm received:', error)
+      toast.error('Gagal mengkonfirmasi penerimaan', { id: loadingToast })
+    }
+  }
+
+  const handleUploadBukti = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!pesanan || !e.target.files || !e.target.files[0]) return
+    
+    const file = e.target.files[0]
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('File harus berupa gambar (jpg, png, dll)')
+      return
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran file maksimal 5MB')
+      return
+    }
+    
+    setUploadingBukti(true)
+    const loadingToast = toast.loading('Mengupload bukti pembayaran...')
+    
+    try {
+      await pesananAPI.uploadBukti(pesanan._id, file)
+      toast.success('✅ Bukti pembayaran berhasil diupload!', { id: loadingToast })
+      fetchPesanan() // Reload data
+    } catch (error) {
+      console.error('Failed to upload bukti:', error)
+      toast.error('Gagal mengupload bukti pembayaran', { id: loadingToast })
+    } finally {
+      setUploadingBukti(false)
+      // Reset file input
+      e.target.value = ''
     }
   }
 
@@ -295,9 +344,88 @@ export default function PesananDetailPage() {
             </div>
 
             {pesanan.pembayaran.status_pembayaran === 'Pending' && pesanan.status_pesanan === 'Menunggu Pembayaran' && (
-              <button className="btn-primary w-full mt-6">
-                Bayar Sekarang
+              <div className="mt-6 space-y-4">
+                {/* QR Code untuk pembayaran */}
+                {pesanan.pembayaran.qris_url && (
+                  <div className="border-2 border-dashed border-primary rounded-lg p-4 text-center bg-neutral-50">
+                    <p className="text-sm font-semibold text-primary mb-2">Scan QRIS untuk Bayar</p>
+                    <img 
+                      src={pesanan.pembayaran.qris_url} 
+                      alt="QRIS Payment" 
+                      className="w-48 h-48 mx-auto mb-2"
+                    />
+                    <p className="text-xs text-neutral-600">Scan dengan aplikasi e-wallet</p>
+                  </div>
+                )}
+                
+                {/* Upload Bukti Pembayaran */}
+                <div className="border border-neutral-300 rounded-lg p-4 bg-white">
+                  <p className="font-semibold text-sm mb-2">Upload Bukti Pembayaran</p>
+                  
+                  {pesanan.pembayaran.bukti_pembayaran_url ? (
+                    <div>
+                      <img 
+                        src={pesanan.pembayaran.bukti_pembayaran_url} 
+                        alt="Bukti Pembayaran" 
+                        className="w-full rounded border border-neutral-200 mb-2"
+                      />
+                      <p className="text-xs text-green-600 mb-2">✓ Bukti sudah diupload, menunggu konfirmasi admin</p>
+                      <label className="block">
+                        <span className="sr-only">Upload ulang bukti</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleUploadBukti}
+                          disabled={uploadingBukti}
+                          className="block w-full text-sm text-neutral-600
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-neutral-100 file:text-neutral-700
+                            hover:file:bg-neutral-200
+                            disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block">
+                        <span className="sr-only">Pilih file bukti pembayaran</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleUploadBukti}
+                          disabled={uploadingBukti}
+                          className="block w-full text-sm text-neutral-600
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-primary file:text-white
+                            hover:file:bg-primary/90
+                            disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                      </label>
+                      <p className="text-xs text-neutral-500 mt-2">Format: JPG, PNG (Max 5MB)</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {pesanan.status_pesanan === 'Dikirim' && (
+              <button 
+                onClick={handleConfirmReceived}
+                className="btn-primary w-full mt-6"
+              >
+                ✅ Konfirmasi Diterima
               </button>
+            )}
+
+            {pesanan.status_pesanan === 'Selesai' && (
+              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded text-center">
+                <p className="text-green-800 font-semibold">✓ Pesanan Selesai</p>
+                <p className="text-sm text-green-600 mt-1">Terima kasih atas pesanannya!</p>
+              </div>
             )}
           </div>
         </div>
