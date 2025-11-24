@@ -431,7 +431,7 @@ export default function PesananDetailPage() {
             {pesanan.pembayaran.status_pembayaran === 'Pending' && pesanan.status_pesanan === 'Menunggu Pembayaran' && (
               <div className="mt-6 space-y-4">
                 {/* QR Code untuk pembayaran */}
-                {pesanan.pembayaran.qris_url && (
+                {pesanan.pembayaran?.qris_url && (
                   <div className="border-2 border-dashed border-primary rounded-lg p-4 text-center bg-neutral-50">
                     <p className="text-sm font-semibold text-primary mb-2">Scan QRIS untuk Bayar</p>
                     <img 
@@ -447,7 +447,7 @@ export default function PesananDetailPage() {
                 <div className="border border-neutral-300 rounded-lg p-4 bg-white">
                   <p className="font-semibold text-sm mb-2">Upload Bukti Pembayaran</p>
                   
-                  {pesanan.pembayaran.bukti_pembayaran_url ? (
+                  {pesanan.pembayaran?.bukti_pembayaran_url ? (
                     <div>
                       <img 
                         src={pesanan.pembayaran.bukti_pembayaran_url} 

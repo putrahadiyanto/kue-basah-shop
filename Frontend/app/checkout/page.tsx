@@ -66,11 +66,11 @@ export default function CheckoutPage() {
         setSavedAddresses(user.alamat)
         // Auto select first address if available
         setSelectedAddressIndex(0)
-        setFormData(prev => ({
-          ...prev,
-          jalan: user.alamat[0].jalan,
-          kota: user.alamat[0].kota,
-        }))
+          setFormData(prev => ({
+            ...prev,
+            jalan: user.alamat?.[0]?.jalan || "",
+            kota: user.alamat?.[0]?.kota || "",
+          }))
       } else {
         setUseNewAddress(true)
       }

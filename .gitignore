@@ -30,6 +30,10 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Ensure Frontend library code is not ignored
+!Frontend/lib/
+!Frontend/lib/**
+
 # Virtual Environment
 venv/
 ENV/
@@ -146,3 +150,27 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+### Backend (consolidated)
+# Python caches, virtual envs, IDE and env files inside Backend/
+Backend/__pycache__/
+Backend/*.py[cod]
+Backend/*$py.class
+Backend/.Python
+Backend/.venv/
+Backend/venv/
+Backend/ENV/
+Backend/env/
+Backend/build/
+Backend/dist/
+Backend/*.egg-info/
+Backend/.env
+Backend/.vscode/
+Backend/*.log
+
+# If Backend creates any local DB dumps
+Backend/dump/
+
+# Keep Frontend library code tracked
+!Frontend/lib/
+!Frontend/lib/**
