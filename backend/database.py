@@ -1,22 +1,29 @@
-import pymongo as mongo
-from dotenv import load_dotenv
 import os
+import sys
+from pymongo import MongoClient
+from dotenv import load_dotenv
+
+load_dotenv()
+
+CONNECTION_STRING = os.getenv('CONNECTION_STRING')
+DATABASE_NAME = os.getenv('DATABASE_NAME')
 
 def connect_to_db():
-
-    print("Loading environment variables from .env file")
-    load_dotenv()
-    CONNECTION_STRING = os.getenv('CONNECTION_STRING')
-    DATABASE_NAME = os.getenv('DATABASE_NAME')
-
+    """Connect to MongoDB and return database instance"""
     if not CONNECTION_STRING or not DATABASE_NAME:
         print("Error: CONNECTION_STRING or DATABASE_NAME not found in environment variables.")
-        exit(1)
-    else :
-        print("Environment variables loaded successfully.")
+        sys.exit(1)
+    
+    try:
+        client = MongoClient(CONNECTION_STRING)
+        db = client[DATABASE_NAME]
+        # Test connection
+        client.server_info()
+        return db
+    except Exception as e:
+        print(f"Error connecting to MongoDB: {e}")
+        sys.exit(1)
 
-    client = mongo.MongoClient(CONNECTION_STRING)
-    db = client[DATABASE_NAME]
-    print("Connected to MongoDB.")
-
-    return db
+def get_database():
+    """Dependency for getting database instance"""
+    return connect_to_db()
