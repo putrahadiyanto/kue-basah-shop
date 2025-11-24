@@ -29,6 +29,8 @@ interface Pesanan {
     status_pembayaran: string
     ongkos_kirim: number
     total_pembayaran: number
+    qris_url?: string
+    bukti_pembayaran_url?: string
   }
 }
 
