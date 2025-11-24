@@ -30,6 +30,9 @@ export default function CheckoutPage() {
   const [cartItems, setCartItems] = useState<CartItemWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [savedAddresses, setSavedAddresses] = useState<Array<{jalan: string, kota: string, kode_pos?: string}>>([])
+  const [useNewAddress, setUseNewAddress] = useState(false)
+  const [selectedAddressIndex, setSelectedAddressIndex] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     nama_penerima: '',
     telepon_penerima: '',
@@ -57,6 +60,21 @@ export default function CheckoutPage() {
         ...prev,
         nama_penerima: user.nama_lengkap || '',
       }))
+      
+      // Load saved addresses
+      if (user.alamat && user.alamat.length > 0) {
+        setSavedAddresses(user.alamat)
+        // Auto select first address if available
+        setSelectedAddressIndex(0)
+        setFormData(prev => ({
+          ...prev,
+          jalan: user.alamat[0].jalan,
+          kota: user.alamat[0].kota,
+        }))
+      } else {
+        setUseNewAddress(true)
+      }
+      
       fetchCart()
     }
   }, [isAuthenticated, isAdmin, user])
@@ -98,6 +116,27 @@ export default function CheckoutPage() {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }))
+  }
+
+  const handleSelectAddress = (index: number) => {
+    setSelectedAddressIndex(index)
+    setUseNewAddress(false)
+    const address = savedAddresses[index]
+    setFormData(prev => ({
+      ...prev,
+      jalan: address.jalan,
+      kota: address.kota,
+    }))
+  }
+
+  const handleUseNewAddress = () => {
+    setUseNewAddress(true)
+    setSelectedAddressIndex(null)
+    setFormData(prev => ({
+      ...prev,
+      jalan: '',
+      kota: '',
     }))
   }
 
@@ -238,32 +277,97 @@ export default function CheckoutPage() {
             {/* Alamat Pengiriman */}
             <div className="bg-white border border-neutral-300 rounded-lg p-6">
               <h2 className="font-display text-xl font-semibold mb-4">Alamat Pengiriman</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Alamat Lengkap *</label>
-                  <input
-                    type="text"
-                    name="jalan"
-                    value={formData.jalan}
-                    onChange={handleChange}
-                    placeholder="Jl. Contoh No. 123"
-                    className="w-full border border-neutral-300 rounded px-3 py-2"
-                    required
-                  />
+              
+              {/* Saved Addresses */}
+              {savedAddresses.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-sm font-medium mb-3">Pilih alamat tersimpan:</p>
+                  <div className="space-y-2">
+                    {savedAddresses.map((address, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => handleSelectAddress(index)}
+                        className={`w-full text-left border-2 rounded-lg p-3 transition ${
+                          selectedAddressIndex === index && !useNewAddress
+                            ? 'border-primary bg-primary/5'
+                            : 'border-neutral-300 hover:border-neutral-400'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-1 w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                            selectedAddressIndex === index && !useNewAddress
+                              ? 'border-primary bg-primary'
+                              : 'border-neutral-300'
+                          }`}>
+                            {selectedAddressIndex === index && !useNewAddress && (
+                              <div className="w-full h-full rounded-full bg-white scale-50"></div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-sm">{address.jalan}</p>
+                            <p className="text-sm text-neutral-600">{address.kota}</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                    
+                    {/* Add New Address Option */}
+                    <button
+                      type="button"
+                      onClick={handleUseNewAddress}
+                      className={`w-full text-left border-2 rounded-lg p-3 transition ${
+                        useNewAddress
+                          ? 'border-primary bg-primary/5'
+                          : 'border-neutral-300 hover:border-neutral-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                          useNewAddress
+                            ? 'border-primary bg-primary'
+                            : 'border-neutral-300'
+                        }`}>
+                          {useNewAddress && (
+                            <div className="w-full h-full rounded-full bg-white scale-50"></div>
+                          )}
+                        </div>
+                        <p className="font-semibold text-sm text-primary">+ Gunakan alamat baru</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Kota *</label>
-                  <input
-                    type="text"
-                    name="kota"
-                    value={formData.kota}
-                    onChange={handleChange}
-                    placeholder="Jakarta"
-                    className="w-full border border-neutral-300 rounded px-3 py-2"
-                    required
-                  />
+              )}
+              
+              {/* Address Form (shown when new address or no saved addresses) */}
+              {(useNewAddress || savedAddresses.length === 0) && (
+                <div className="space-y-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Alamat Lengkap *</label>
+                    <input
+                      type="text"
+                      name="jalan"
+                      value={formData.jalan}
+                      onChange={handleChange}
+                      placeholder="Jl. Contoh No. 123"
+                      className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Kota *</label>
+                    <input
+                      type="text"
+                      name="kota"
+                      value={formData.kota}
+                      onChange={handleChange}
+                      placeholder="Jakarta"
+                      className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Pengiriman */}

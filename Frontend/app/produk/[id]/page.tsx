@@ -21,6 +21,7 @@ interface Jajanan {
 interface Ulasan {
   _id: string
   user_id: string
+  user_name?: string
   jajanan_id: string
   rating: number
   komentar: string
@@ -49,8 +50,12 @@ export default function ProductDetailPage() {
     try {
       const [productData, ulasanData] = await Promise.all([
         jajananAPI.getById(id),
-        ulasanAPI.getByJajanan(id).catch(() => []),
+        ulasanAPI.getByJajanan(id).catch((e) => {
+          console.error('Error fetching reviews:', e)
+          return []
+        }),
       ])
+      console.log('Fetched reviews for product', id, ulasanData)
       setProduct(productData)
       setUlasan(ulasanData)
     } catch (error) {
@@ -275,21 +280,32 @@ export default function ProductDetailPage() {
         ) : (
           <div className="space-y-4">
             {ulasan.map((review) => (
-              <div key={review._id} className="border border-neutral-300 rounded-lg p-4">
+              <div key={review._id} className="border border-neutral-300 rounded-lg p-4 bg-white">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold">User #{review.user_id.substring(0, 8)}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-bold">
+                      {review.user_name ? review.user_name[0].toUpperCase() : 'U'}
+                    </div>
+                    <div>
+                      <p className="font-semibold">{review.user_name || 'User'}</p>
+                      <p className="text-xs text-neutral-500">
+                        {new Date(review.tanggal).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  </div>
                   <div className="flex gap-1">
                     {[...Array(5)].map((_, i) => (
-                      <span key={i} className="text-sm">
+                      <span key={i} className="text-yellow-500 text-lg">
                         {i < review.rating ? '★' : '☆'}
                       </span>
                     ))}
                   </div>
                 </div>
-                <p className="text-neutral-700">{review.komentar}</p>
-                <p className="text-xs text-neutral-500 mt-2">
-                  {new Date(review.tanggal).toLocaleDateString('id-ID')}
-                </p>
+                <p className="text-neutral-700 mt-3 leading-relaxed">{review.komentar}</p>
               </div>
             ))}
           </div>

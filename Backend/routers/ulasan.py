@@ -24,9 +24,9 @@ def get_user_id_from_token(current_user: TokenData, request: Request):
             detail="Invalid token"
         )
 
-@router.get("/jajanan/{jajanan_id}", response_model=List[UlasanResponse])
+@router.get("/jajanan/{jajanan_id}")
 async def get_reviews_by_jajanan(jajanan_id: str, request: Request):
-    """Get all reviews for a specific jajanan/product"""
+    """Get all reviews for a specific jajanan/product with user names"""
     db = request.app.mongodb
     
     # Try both ObjectId and string comparison for compatibility
@@ -36,15 +36,31 @@ async def get_reviews_by_jajanan(jajanan_id: str, request: Request):
     if not ulasan_list and ObjectId.is_valid(jajanan_id):
         ulasan_list = list(db.ulasan.find({"jajanan_id": ObjectId(jajanan_id)}))
     
+    result = []
     for ulasan in ulasan_list:
         ulasan["_id"] = str(ulasan["_id"])
         # Handle both string and ObjectId
         if isinstance(ulasan.get("jajanan_id"), ObjectId):
             ulasan["jajanan_id"] = str(ulasan["jajanan_id"])
-        if isinstance(ulasan.get("user_id"), ObjectId):
-            ulasan["user_id"] = str(ulasan["user_id"])
+        
+        user_id_obj = ulasan.get("user_id")
+        if isinstance(user_id_obj, ObjectId):
+            user_id = str(user_id_obj)
+        else:
+            user_id = user_id_obj
+        
+        ulasan["user_id"] = user_id
+        
+        # Get user name
+        try:
+            user = db.users.find_one({"_id": ObjectId(user_id)})
+            ulasan["user_name"] = user.get("nama_lengkap", "User") if user else "User"
+        except:
+            ulasan["user_name"] = "User"
+        
+        result.append(ulasan)
     
-    return ulasan_list
+    return result
 
 @router.get("/{ulasan_id}", response_model=UlasanResponse)
 async def get_review_by_id(ulasan_id: str, request: Request):

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { pesananAPI, jajananAPI } from '@/lib/api'
+import { pesananAPI, jajananAPI, ulasanAPI } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Pesanan {
@@ -39,6 +39,7 @@ interface ItemWithDetails {
   nama?: string
   satuan?: string
   foto_url?: string
+  sudah_diulas?: boolean
 }
 
 export default function PesananDetailPage() {
@@ -50,6 +51,11 @@ export default function PesananDetailPage() {
   const [items, setItems] = useState<ItemWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [uploadingBukti, setUploadingBukti] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<ItemWithDetails | null>(null)
+  const [reviewForm, setReviewForm] = useState({ rating: 5, komentar: '' })
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [existingReviews, setExistingReviews] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!authLoading && isAdmin()) {
@@ -73,16 +79,27 @@ export default function PesananDetailPage() {
       const data = await pesananAPI.getById(id)
       setPesanan(data)
       
-      // Fetch product details
+      // Fetch product details and check existing reviews
       const itemsWithDetails = await Promise.all(
         data.item_pesanan.map(async (item: any) => {
           try {
             const product = await jajananAPI.getById(item.jajanan_id)
+            
+            // Check if user already reviewed this product
+            let sudah_diulas = false
+            try {
+              const reviews = await ulasanAPI.getByJajanan(item.jajanan_id)
+              sudah_diulas = reviews.some((review: any) => review.user_id === data.pelanggan_id)
+            } catch (error) {
+              // Ignore error
+            }
+            
             return {
               ...item,
               nama: product.nama,
               satuan: product.satuan,
               foto_url: product.foto_url,
+              sudah_diulas,
             }
           } catch (error) {
             return item
@@ -90,6 +107,14 @@ export default function PesananDetailPage() {
         })
       )
       setItems(itemsWithDetails)
+      
+      // Track which products already have reviews
+      const reviewedIds = new Set(
+        itemsWithDetails
+          .filter(item => item.sudah_diulas)
+          .map(item => item.jajanan_id)
+      )
+      setExistingReviews(reviewedIds)
     } catch (error) {
       console.error('Failed to fetch order:', error)
       toast.error('Gagal memuat detail pesanan')
@@ -144,6 +169,52 @@ export default function PesananDetailPage() {
       setUploadingBukti(false)
       // Reset file input
       e.target.value = ''
+    }
+  }
+
+  const handleOpenReviewModal = (item: ItemWithDetails) => {
+    setSelectedProduct(item)
+    setReviewForm({ rating: 5, komentar: '' })
+    setShowReviewModal(true)
+  }
+
+  const handleSubmitReview = async () => {
+    if (!selectedProduct) return
+    
+    if (!reviewForm.komentar.trim()) {
+      toast.error('Komentar harus diisi')
+      return
+    }
+    
+    setSubmittingReview(true)
+    const loadingToast = toast.loading('Mengirim ulasan...')
+    
+    try {
+      await ulasanAPI.create({
+        jajanan_id: selectedProduct.jajanan_id,
+        rating: reviewForm.rating,
+        komentar: reviewForm.komentar.trim(),
+      })
+      toast.success('✅ Ulasan berhasil dikirim!', { id: loadingToast })
+      
+      // Mark this product as reviewed
+      setExistingReviews(prev => new Set([...prev, selectedProduct.jajanan_id]))
+      
+      // Update items to mark as reviewed
+      setItems(prevItems => prevItems.map(item => 
+        item.jajanan_id === selectedProduct.jajanan_id
+          ? { ...item, sudah_diulas: true }
+          : item
+      ))
+      
+      setShowReviewModal(false)
+      setSelectedProduct(null)
+      setReviewForm({ rating: 5, komentar: '' })
+    } catch (error) {
+      console.error('Failed to submit review:', error)
+      toast.error('Gagal mengirim ulasan', { id: loadingToast })
+    } finally {
+      setSubmittingReview(false)
     }
   }
 
@@ -253,6 +324,20 @@ export default function PesananDetailPage() {
                     <p className="text-sm text-neutral-600">
                       {item.qty} x Rp {item.harga_satuan.toLocaleString('id-ID')}
                     </p>
+                    {pesanan.status_pesanan === 'Selesai' && (
+                      item.sudah_diulas ? (
+                        <span className="mt-2 inline-block text-sm text-green-600 font-medium">
+                          ✓ Sudah Diulas
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenReviewModal(item)}
+                          className="mt-2 text-sm text-primary hover:underline font-medium"
+                        >
+                          ⭐ Beri Ulasan
+                        </button>
+                      )
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-primary">
@@ -422,14 +507,138 @@ export default function PesananDetailPage() {
             )}
 
             {pesanan.status_pesanan === 'Selesai' && (
-              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded text-center">
-                <p className="text-green-800 font-semibold">✓ Pesanan Selesai</p>
-                <p className="text-sm text-green-600 mt-1">Terima kasih atas pesanannya!</p>
+              <div className="mt-6 space-y-3">
+                <div className="p-4 bg-green-50 border border-green-200 rounded text-center">
+                  <p className="text-green-800 font-semibold">✓ Pesanan Selesai</p>
+                  <p className="text-sm text-green-600 mt-1">Terima kasih atas pesanannya!</p>
+                </div>
+                <div className="p-4 bg-yellow-50 border-2 border-yellow-300 rounded">
+                  <p className="font-semibold text-yellow-800 text-sm mb-2">💬 Berikan Ulasan</p>
+                  <p className="text-xs text-yellow-700 mb-3">Bagikan pengalaman Anda dengan produk yang sudah Anda terima</p>
+                  <p className="text-xs text-yellow-600">Klik tombol "⭐ Beri Ulasan" di setiap produk di atas untuk memberikan rating dan komentar</p>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Review Section for Completed Orders */}
+      {pesanan.status_pesanan === 'Selesai' && (
+        <div className="mt-12 bg-gradient-to-r from-primary/5 to-secondary/5 border-2 border-primary/20 rounded-lg p-8">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-primary mb-2">Bagaimana Pengalaman Anda?</h2>
+            <p className="text-neutral-600">Bantu pembeli lain dengan memberikan ulasan untuk produk yang Anda beli</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {items.map((item, index) => (
+              <div key={index} className={`bg-white border-2 rounded-lg p-4 transition ${
+                item.sudah_diulas ? 'border-green-200 bg-green-50/30' : 'border-neutral-200 hover:border-primary'
+              }`}>
+                <div className="flex gap-3 mb-3">
+                  <div className="w-16 h-16 bg-neutral-200 rounded overflow-hidden flex-shrink-0">
+                    {item.foto_url ? (
+                      <img src={item.foto_url} alt={item.nama} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-neutral-400 text-xs">No Img</div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-sm truncate">{item.nama || 'Produk'}</h3>
+                    <p className="text-xs text-neutral-600">{item.qty} {item.satuan || 'pcs'}</p>
+                  </div>
+                </div>
+                {item.sudah_diulas ? (
+                  <div className="w-full py-2 px-4 bg-green-100 text-green-700 rounded text-center font-medium text-sm">
+                    ✓ Sudah Diulas
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleOpenReviewModal(item)}
+                    className="w-full py-2 px-4 bg-primary text-white rounded hover:bg-primary/90 transition font-medium text-sm"
+                  >
+                    ⭐ Beri Ulasan
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {showReviewModal && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6 border-b border-neutral-200">
+              <h2 className="text-2xl font-bold text-primary">Beri Ulasan</h2>
+              <p className="text-neutral-600 text-sm mt-1">{selectedProduct.nama}</p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {/* Rating */}
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-2">Rating *</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                      className="text-3xl transition-all hover:scale-110"
+                    >
+                      {star <= reviewForm.rating ? '⭐' : '☆'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-sm text-neutral-600 mt-1">
+                  {reviewForm.rating === 5 && 'Sangat Puas'}
+                  {reviewForm.rating === 4 && 'Puas'}
+                  {reviewForm.rating === 3 && 'Cukup'}
+                  {reviewForm.rating === 2 && 'Kurang'}
+                  {reviewForm.rating === 1 && 'Sangat Kurang'}
+                </p>
+              </div>
+
+              {/* Komentar */}
+              <div>
+                <label className="block text-sm font-semibold text-neutral-700 mb-1">Komentar *</label>
+                <textarea
+                  value={reviewForm.komentar}
+                  onChange={(e) => setReviewForm({ ...reviewForm, komentar: e.target.value })}
+                  placeholder="Bagikan pengalaman Anda dengan produk ini..."
+                  rows={4}
+                  className="w-full border border-neutral-300 rounded px-3 py-2 focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+                <p className="text-xs text-neutral-500 mt-1">
+                  {reviewForm.komentar.length} karakter
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-neutral-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowReviewModal(false)
+                  setSelectedProduct(null)
+                  setReviewForm({ rating: 5, komentar: '' })
+                }}
+                disabled={submittingReview}
+                className="px-4 py-2 border border-neutral-300 rounded hover:bg-neutral-50 transition font-medium disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSubmitReview}
+                disabled={submittingReview || !reviewForm.komentar.trim()}
+                className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submittingReview ? 'Mengirim...' : 'Kirim Ulasan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
