@@ -14,12 +14,20 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use bcrypt_sha256 as the preferred scheme to avoid bcrypt's 72-byte
+# input length limitation (bcrypt truncates passwords >72 bytes).
+# Keep plain bcrypt in the list so existing hashes remain verifiable.
+pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password"""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except ValueError:
+        # bcrypt (if used) may raise ValueError for passwords longer than 72 bytes.
+        # Treat as verification failure instead of crashing the request handler.
+        return False
 
 def get_password_hash(password: str) -> str:
     """Hash a password"""
