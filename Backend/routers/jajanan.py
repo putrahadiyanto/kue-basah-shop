@@ -30,6 +30,85 @@ async def get_all_jajanan(
     
     return jajanan_list
 
+# get all jajanan dan tersorting dengan join pesanan terbanyak
+@router.get("/top-selling", response_model=List[JajananResponse])
+async def get_top_selling_jajanan(request: Request, limit: int = 10):
+    """Get top selling jajanan/products sorted by number of orders and total quantity"""
+    db = request.app.mongodb
+    
+    # Debug: Check pesanan data
+    sample_pesanan = db.pesanan.find_one()
+    if sample_pesanan:
+        print(f"DEBUG: Sample pesanan: {sample_pesanan.get('_id')}")
+        if sample_pesanan.get('item_pesanan'):
+            print(f"DEBUG: First item jajanan_id: {sample_pesanan['item_pesanan'][0].get('jajanan_id')} (type: {type(sample_pesanan['item_pesanan'][0].get('jajanan_id')).__name__})")
+    
+    pipeline = [
+        {
+            "$addFields": {
+                "jajanan_id_str": {"$toString": "$_id"},
+                "jajanan_id_obj": "$_id"
+            }
+        },
+        {
+            "$lookup": {
+                "from": "pesanan",
+                "let": {
+                    "jajanan_id_str": "$jajanan_id_str",
+                    "jajanan_id_obj": "$jajanan_id_obj"
+                },
+                "pipeline": [
+                    {
+                        "$unwind": "$item_pesanan"
+                    },
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$or": [
+                                    {"$eq": ["$item_pesanan.jajanan_id", "$$jajanan_id_str"]},
+                                    {"$eq": ["$item_pesanan.jajanan_id", "$$jajanan_id_obj"]}
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "$project": {
+                            "qty": "$item_pesanan.qty"
+                        }
+                    }
+                ],
+                "as": "pesanan_info"
+            }
+        },
+        {
+            "$addFields": {
+                "total_orders": {"$size": "$pesanan_info"},
+                "total_quantity": {
+                    "$sum": "$pesanan_info.qty"
+                }
+            }
+        },
+        {
+            "$sort": {"total_quantity": -1, "total_orders": -1}
+        },
+        {
+            "$limit": limit
+        },
+        {
+            "$project": {
+                "pesanan_info": 0,
+                "jajanan_id_str": 0,
+                "jajanan_id_obj": 0
+            }
+        }
+    ]
+    
+    jajanan_list = list(db.jajanan.aggregate(pipeline))
+    for jajanan in jajanan_list:
+        jajanan["_id"] = str(jajanan["_id"])
+    
+    return jajanan_list
+
 @router.get("/{jajanan_id}", response_model=JajananResponse)
 async def get_jajanan_by_id(jajanan_id: str, request: Request):
     """Get jajanan/product by ID"""

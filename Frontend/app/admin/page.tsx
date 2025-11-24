@@ -16,6 +16,8 @@ interface Jajanan {
   status_ketersediaan: string
   waktu_preorder_hari: number
   foto_url?: string
+  total_orders?: number
+  total_quantity?: number
 }
 
 interface Pesanan {
@@ -37,6 +39,7 @@ export default function AdminDashboard() {
   const { isAdmin, isAuthenticated, loading } = useAuth()
   const router = useRouter()
   const [products, setProducts] = useState<Jajanan[]>([])
+  const [topProducts, setTopProducts] = useState<Jajanan[]>([])
   const [orders, setOrders] = useState<Pesanan[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -69,12 +72,14 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [productsData, ordersData] = await Promise.all([
+      const [productsData, ordersData, topProductsData] = await Promise.all([
         jajananAPI.getAll(),
         pesananAPI.getAll(),
+        jajananAPI.getTopSelling(5),
       ])
       setProducts(productsData)
       setOrders(ordersData)
+      setTopProducts(topProductsData)
     } catch (error) {
       console.error('Failed to fetch data:', error)
       toast.error('Gagal memuat data')
@@ -218,16 +223,6 @@ export default function AdminDashboard() {
     pendingOrders: orders.filter(o => o.status_pesanan === 'Menunggu Pembayaran').length,
   }
 
-  const productSales = orders.flatMap(o => o.item_pesanan).reduce((acc, item) => {
-    acc[item.jajanan_id] = (acc[item.jajanan_id] || 0) + item.qty
-    return acc
-  }, {} as Record<string, number>)
-
-  const topProducts = products
-    .map(p => ({ ...p, sold: productSales[p._id] || 0 }))
-    .sort((a, b) => b.sold - a.sold)
-    .slice(0, 5)
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
       {/* Header */}
@@ -284,26 +279,33 @@ export default function AdminDashboard() {
       <div className="bg-white border-2 border-neutral-300 rounded-lg p-6 mb-8">
         <h2 className="text-xl font-bold text-primary mb-4">🏆 Produk Terlaris</h2>
         <div className="space-y-3">
-          {topProducts.map((product, index) => (
-            <div key={product._id} className="flex items-center gap-4 p-3 border border-neutral-200 rounded hover:bg-neutral-50 transition">
-              <span className="text-2xl font-bold text-neutral-400">#{index + 1}</span>
-              <div className="w-12 h-12 bg-neutral-200 rounded flex-shrink-0 overflow-hidden">
-                {product.foto_url ? (
-                  <img src={product.foto_url} alt={product.nama} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-neutral-400">📦</div>
-                )}
+          {topProducts.length > 0 ? (
+            topProducts.map((product, index) => (
+              <div key={product._id} className="flex items-center gap-4 p-3 border border-neutral-200 rounded hover:bg-neutral-50 transition">
+                <span className="text-2xl font-bold text-neutral-400">#{index + 1}</span>
+                <div className="w-12 h-12 bg-neutral-200 rounded flex-shrink-0 overflow-hidden">
+                  {product.foto_url ? (
+                    <img src={product.foto_url} alt={product.nama} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-neutral-400">📦</div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-neutral-900">{product.nama}</p>
+                  <p className="text-sm text-neutral-600">Rp {product.harga.toLocaleString('id-ID')} • {product.satuan}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-primary">Terjual: {product.total_quantity || 0}</p>
+                  <p className="text-sm text-neutral-600">Rp {((product.total_quantity || 0) * product.harga).toLocaleString('id-ID')}</p>
+                  <p className="text-xs text-neutral-500 mt-1">{product.total_orders || 0} pesanan</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-neutral-900">{product.nama}</p>
-                <p className="text-sm text-neutral-600">Rp {product.harga.toLocaleString('id-ID')} • {product.satuan}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-primary">Terjual: {product.sold}</p>
-                <p className="text-sm text-neutral-600">Rp {(product.sold * product.harga).toLocaleString('id-ID')}</p>
-              </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-neutral-500">
+              <p>Belum ada data penjualan</p>
             </div>
-          ))}
+          )}
         </div>
       </div>
 

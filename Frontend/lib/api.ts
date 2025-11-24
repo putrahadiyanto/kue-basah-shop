@@ -95,6 +95,13 @@ export const jajananAPI = {
     return handleResponse(response);
   },
 
+  // Get top selling products
+  getTopSelling: async (limit: number = 10) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const response = await fetch(`${API_BASE_URL}/api/jajanan/top-selling?limit=${limit}`, { headers });
+    return handleResponse(response);
+  },
+
   // Get product by ID
   getById: async (jajananId: string) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

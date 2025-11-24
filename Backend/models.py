@@ -70,6 +70,8 @@ class JajananUpdate(BaseModel):
 
 class JajananResponse(JajananBase):
     id: str = Field(alias="_id")
+    total_orders: Optional[int] = 0
+    total_quantity: Optional[int] = 0
     
     model_config = ConfigDict(
         populate_by_name=True,
