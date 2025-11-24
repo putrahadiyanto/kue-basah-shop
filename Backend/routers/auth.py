@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from bson import ObjectId
 from models import UserCreate, UserLogin, Token, UserResponse
-from auth import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth import get_password_hash, verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
 
 router = APIRouter()
 
@@ -78,3 +78,22 @@ async def login_json(user_login: UserLogin, request: Request):
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(request: Request, current_user = Depends(get_current_user)):
+    """Get current user information"""
+    db = request.app.mongodb
+    
+    # Get user from database
+    user = db.users.find_one({"email": current_user.email})
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Convert ObjectId to string
+    user["_id"] = str(user["_id"])
+    
+    return user

@@ -129,25 +129,72 @@ async def create_review(
 
     # 2. Check if user has purchased this product (status 'selesai')
     # Look for an order where user_id matches AND status is 'selesai' AND item_pesanan contains this jajanan_id
-    has_purchased = db.pesanan.find_one({
+    
+    # First, let's check with both string and ObjectId formats for jajanan_id
+    jajanan_id_str = ulasan.jajanan_id
+    jajanan_id_obj = ObjectId(ulasan.jajanan_id) if ObjectId.is_valid(ulasan.jajanan_id) else None
+    
+    # Try multiple query variations to handle different data formats
+    # Use case-insensitive regex for status to handle "selesai", "Selesai", etc.
+    status_regex = {"$regex": "^selesai$", "$options": "i"}
+    
+    query_variations = [
+        {
+            "pelanggan_id": ObjectId(user_id),
+            "status_pesanan": status_regex,
+            "item_pesanan": {
+                "$elemMatch": {"jajanan_id": jajanan_id_str}
+            }
+        }
+    ]
+    
+    if jajanan_id_obj:
+        query_variations.append({
+            "pelanggan_id": ObjectId(user_id),
+            "status_pesanan": status_regex,
+            "item_pesanan": {
+                "$elemMatch": {"jajanan_id": jajanan_id_obj}
+            }
+        })
+    
+    # Also try with user_id field (in case it's stored differently)
+    query_variations.append({
         "user_id": ObjectId(user_id),
-        "status_pesanan": "selesai",
+        "status_pesanan": status_regex,
         "item_pesanan": {
-            "$elemMatch": {"jajanan_id": ulasan.jajanan_id}
+            "$elemMatch": {"jajanan_id": jajanan_id_str}
         }
     })
     
-    # Also check if jajanan_id was stored as ObjectId in item_pesanan (just in case)
-    if not has_purchased:
-        has_purchased = db.pesanan.find_one({
+    if jajanan_id_obj:
+        query_variations.append({
             "user_id": ObjectId(user_id),
-            "status_pesanan": "selesai",
+            "status_pesanan": status_regex,
             "item_pesanan": {
-                "$elemMatch": {"jajanan_id": ObjectId(ulasan.jajanan_id)}
+                "$elemMatch": {"jajanan_id": jajanan_id_obj}
             }
         })
-
+    
+    # Try all query variations
+    has_purchased = None
+    for query in query_variations:
+        has_purchased = db.pesanan.find_one(query)
+        if has_purchased:
+            logger.info(f"Found purchase with query: {query}")
+            break
+    
     if not has_purchased:
+        # Log for debugging
+        logger.warning(f"No purchase found for user_id={user_id}, jajanan_id={ulasan.jajanan_id}")
+        # Let's check what orders exist for this user
+        user_orders = list(db.pesanan.find({"$or": [
+            {"pelanggan_id": ObjectId(user_id)},
+            {"user_id": ObjectId(user_id)}
+        ]}))
+        logger.info(f"User has {len(user_orders)} orders total")
+        for order in user_orders:
+            logger.info(f"Order: status={order.get('status_pesanan')}, items={len(order.get('item_pesanan', []))}")
+        
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Anda harus membeli produk ini dan pesanan selesai sebelum memberikan ulasan"
