@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Request, Depends
+import logging
 from typing import List
 from bson import ObjectId
 from datetime import datetime
@@ -8,6 +9,8 @@ from jose import jwt
 import os
 
 router = APIRouter()
+
+logger = logging.getLogger("uvicorn.error")
 
 def get_user_id_from_token(current_user: TokenData, request: Request):
     """Extract user_id from token"""
@@ -29,12 +32,13 @@ async def get_reviews_by_jajanan(jajanan_id: str, request: Request):
     """Get all reviews for a specific jajanan/product with user names"""
     db = request.app.mongodb
     
-    # Try both ObjectId and string comparison for compatibility
-    ulasan_list = list(db.ulasan.find({"jajanan_id": jajanan_id}))
+    # Create query to find reviews by jajanan_id (both string and ObjectId)
+    query_filters = [{"jajanan_id": jajanan_id}]
+    if ObjectId.is_valid(jajanan_id):
+        query_filters.append({"jajanan_id": ObjectId(jajanan_id)})
     
-    # If not found, try with ObjectId
-    if not ulasan_list and ObjectId.is_valid(jajanan_id):
-        ulasan_list = list(db.ulasan.find({"jajanan_id": ObjectId(jajanan_id)}))
+    # Use $or to get ALL matching reviews
+    ulasan_list = list(db.ulasan.find({"$or": query_filters}))
     
     result = []
     for ulasan in ulasan_list:
@@ -59,7 +63,7 @@ async def get_reviews_by_jajanan(jajanan_id: str, request: Request):
             ulasan["user_name"] = "User"
         
         result.append(ulasan)
-    
+
     return result
 
 @router.get("/{ulasan_id}", response_model=UlasanResponse)
@@ -93,7 +97,7 @@ async def create_review(
     request: Request,
     current_user: TokenData = Depends(get_current_user)
 ):
-    """Create a new review"""
+    """Create a new review (only if purchased and not reviewed yet)"""
     db = request.app.mongodb
     user_id = get_user_id_from_token(current_user, request)
     
@@ -109,6 +113,44 @@ async def create_review(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Jajanan not found"
+        )
+    
+    # 1. Check if user has already reviewed this product
+    existing_review = db.ulasan.find_one({
+        "user_id": ObjectId(user_id),
+        "jajanan_id": ObjectId(ulasan.jajanan_id)
+    })
+    
+    if existing_review:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Anda sudah memberikan ulasan untuk produk ini"
+        )
+
+    # 2. Check if user has purchased this product (status 'selesai')
+    # Look for an order where user_id matches AND status is 'selesai' AND item_pesanan contains this jajanan_id
+    has_purchased = db.pesanan.find_one({
+        "user_id": ObjectId(user_id),
+        "status_pesanan": "selesai",
+        "item_pesanan": {
+            "$elemMatch": {"jajanan_id": ulasan.jajanan_id}
+        }
+    })
+    
+    # Also check if jajanan_id was stored as ObjectId in item_pesanan (just in case)
+    if not has_purchased:
+        has_purchased = db.pesanan.find_one({
+            "user_id": ObjectId(user_id),
+            "status_pesanan": "selesai",
+            "item_pesanan": {
+                "$elemMatch": {"jajanan_id": ObjectId(ulasan.jajanan_id)}
+            }
+        })
+
+    if not has_purchased:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Anda harus membeli produk ini dan pesanan selesai sebelum memberikan ulasan"
         )
     
     ulasan_dict = ulasan.model_dump()

@@ -44,6 +44,21 @@ export default function ProductDetailPage() {
     fetchProductData()
   }, [id])
 
+  // Re-fetch product and reviews when the window/tab regains focus
+  useEffect(() => {
+    const onFocus = () => {
+      if (id) fetchProductData()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', onFocus)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', onFocus)
+      }
+    }
+  }, [id])
+
   const fetchProductData = async () => {
     if (!id) return
     

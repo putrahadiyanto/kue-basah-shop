@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { pesananAPI, jajananAPI, ulasanAPI } from '@/lib/api'
+import { pesananAPI, jajananAPI, ulasanAPI, userAPI } from '@/lib/api'
 import toast from 'react-hot-toast'
 
 interface Pesanan {
@@ -80,6 +80,15 @@ export default function PesananDetailPage() {
     try {
       const data = await pesananAPI.getById(id)
       setPesanan(data)
+      // Get current logged-in user to determine which items this user already reviewed
+      let currentUserId: string | null = null
+      try {
+        const currentUser = await userAPI.getCurrentUser()
+        currentUserId = currentUser?._id || null
+      } catch (err) {
+        // ignore — fallback to using pesanan.pelanggan_id if needed
+        currentUserId = null
+      }
       
       // Fetch product details and check existing reviews
       const itemsWithDetails = await Promise.all(
@@ -87,13 +96,18 @@ export default function PesananDetailPage() {
           try {
             const product = await jajananAPI.getById(item.jajanan_id)
             
-            // Check if user already reviewed this product
+            // Check if the currently logged-in user already reviewed this product
             let sudah_diulas = false
             try {
               const reviews = await ulasanAPI.getByJajanan(item.jajanan_id)
-              sudah_diulas = reviews.some((review: any) => review.user_id === data.pelanggan_id)
+              // Only consider a product 'sudah_diulas' when we know the current user's id.
+              if (currentUserId) {
+                sudah_diulas = reviews.some((review: any) => review.user_id === currentUserId)
+              } else {
+                sudah_diulas = false
+              }
             } catch (error) {
-              // Ignore error
+              // Ignore error — default to false
             }
             
             return {

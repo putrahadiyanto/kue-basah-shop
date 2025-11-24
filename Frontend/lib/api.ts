@@ -366,8 +366,13 @@ export const ulasanAPI = {
   getByJajanan: async (jajananId: string) => {
     // append timestamp to avoid caching stale responses
     const ts = Date.now()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }
     const response = await fetch(`${API_BASE_URL}/api/ulasan/jajanan/${jajananId}?_=${ts}`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers,
+      // ensure browser doesn't serve a cached response
+      cache: 'no-store',
+      // always use CORS mode so cross-origin requests follow CORS rules
+      mode: 'cors',
     });
     return handleResponse(response);
   },
