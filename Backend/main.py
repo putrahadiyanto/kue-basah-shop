@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 from contextlib import asynccontextmanager
 from routers import users, jajanan, carts, pesanan, ulasan, auth
 from database import connect_to_db
@@ -21,10 +22,21 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware untuk mengizinkan request dari frontend
+# Configure CORS via environment variables so frontend on other devices can access the API.
+# Development default: allow all origins. For production set ALLOW_ALL_ORIGINS=false
+# and set ALLOWED_ORIGINS to a comma-separated list (e.g. http://localhost:3000,http://192.168.1.4:3000)
+allow_all = os.getenv('ALLOW_ALL_ORIGINS', 'true').lower() == 'true'
+allowed_origins_env = os.getenv('ALLOWED_ORIGINS', '')
+if allow_all:
+    origins = ["*"]
+else:
+    origins = [o.strip() for o in allowed_origins_env.split(',') if o.strip()]
+    if 'http://localhost:3000' not in origins:
+        origins.append('http://localhost:3000')
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
