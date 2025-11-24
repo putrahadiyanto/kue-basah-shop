@@ -181,4 +181,4 @@ db.createCollection("pesanan", {
    }
 });
 
-print("✅ Schema berhasil dibuat untuk 'jajanan_db' dengan 4 koleksi.");
+print(" Schema berhasil dibuat untuk 'jajanan_db' dengan 4 koleksi.");

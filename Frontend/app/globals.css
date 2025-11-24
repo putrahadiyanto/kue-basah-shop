@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --font-display: 'Playfair Display', serif;
+  --font-sans: 'Outfit', sans-serif;
+  
+  --color-primary: #8B5A3C;
+  --color-secondary: #D4A574;
+  --color-accent: #C9A678;
+  --color-neutral-50: #FDFCF9;
+  --color-neutral-100: #F8F6F2;
+  --color-neutral-200: #EDE8E0;
+  --color-neutral-300: #D9D0C4;
+  --color-neutral-600: #6B6159;
+  --color-neutral-900: #2D2420;
+  --color-success: #6B9B4D;
+  --color-warning: #CD8436;
+  
+  --radius: 0.375rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  
+  body {
+    @apply bg-neutral-50 text-neutral-900 font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-semibold text-neutral-900 tracking-tight;
+  }
+  
+  h1 {
+    @apply text-4xl md:text-5xl;
+  }
+  
+  h2 {
+    @apply text-3xl md:text-4xl;
+  }
+  
+  h3 {
+    @apply text-2xl;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-primary text-neutral-50 rounded transition-all hover:bg-primary/90 active:scale-95 font-medium;
+  }
+  
+  .btn-secondary {
+    @apply px-6 py-3 border border-primary text-primary rounded transition-all hover:bg-primary hover:text-neutral-50 font-medium;
+  }
+  
+  .badge-preorder {
+    @apply inline-block px-3 py-1 bg-warning text-neutral-50 text-xs rounded font-medium tracking-wide;
+  }
+  
+  .badge-ready {
+    @apply inline-block px-3 py-1 bg-success text-neutral-50 text-xs rounded font-medium tracking-wide;
+  }
+  
+  .product-card {
+    @apply border border-neutral-200 rounded bg-white hover:shadow-xl transition-all duration-300;
+  }
+}

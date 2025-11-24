@@ -1,1 +1,148 @@
+# Environment Variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Next.js
+Frontend/.next/
+Frontend/out/
+Frontend/build/
+Frontend/dist/
+
+# Next.js dependencies
+Frontend/node_modules/
+node_modules/
+
+# Next.js testing
+Frontend/.env.test.local
+Frontend/.env.local
+Frontend/.env.development.local
+Frontend/.env.production.local
+
+# Next.js misc
+Frontend/.DS_Store
+Frontend/*.pem
+
+# Vercel
+.vercel
+
+# TypeScript
+Frontend/*.tsbuildinfo
+Frontend/next-env.d.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+.DS_Store
+
+# MongoDB
+dump/
+*.bson
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Package managers
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
